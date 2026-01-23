@@ -1,5 +1,5 @@
 
--- DECRYPT BY MAHIRU 
+-- FadelSM 
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -406,7 +406,7 @@ function SendFishWebhook(fishId, metadata)
                 {name = "💰 Sell Price", value = "```❯ " .. price .. "```"},
                 {name = "🕒 Caught At", value = "```❯ " .. os.date("%Y-%m-%d %H:%M:%S") .. "```"}
             },
-            footer = {text = "Powered By mahiru", icon_url = "https://i.imgur.com/ly3iUKn.jpeg"},
+            footer = {text = "Powered By psycho", icon_url = "https://i.imgur.com/ly3iUKn.jpeg"},
             timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z")
         }}
     }
