@@ -17,7 +17,7 @@ function AdminPanel:CheckAdmin()
     }
     
     local adminNames = {
-        "dytihfay"
+        "putraxlowzz_22"
     }
     
     -- AUTO CHECK: Tampilkan semua info
