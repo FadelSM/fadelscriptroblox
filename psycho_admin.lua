@@ -13,7 +13,7 @@ function AdminPanel:CheckAdmin()
     print("[Admin] Checking admin for:", localPlayer.Name, "ID:", localPlayer.UserId)
     
     local adminIds = {
-        8515724699
+        9369749980
     }
     
     local adminNames = {
