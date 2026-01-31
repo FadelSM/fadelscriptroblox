@@ -1163,15 +1163,15 @@ EventsTab:AddToggle({
 local AboutTab = MainWindow:MakeTab({Name = "About", Icon = "rbxassetid://4483345998", PremiumOnly = false})
 
 AboutTab:AddSection({Name = "Script Information"})
-AboutTab:AddParagraph("Mahiru Script V1", "A fishing script for Roblox")
-AboutTab:AddParagraph("Developer", "LangitDev")
-AboutTab:AddParagraph("GitHub", "github.com/LangitDeveloper")
-AboutTab:AddParagraph("Discord", "discord.gg/mahiruscript")
+AboutTab:AddParagraph("Psycho Script V1", "A fishing script for Roblox")
+AboutTab:AddParagraph("Developer", "FadelSM")
+AboutTab:AddParagraph("GitHub", "github.com/FadelSM")
+AboutTab:AddParagraph("Discord", "discord.gg/psychoscript")
 
 AboutTab:AddButton({
     Name = "Discord Information",
     Callback = function()
-        setclipboard("https://discord.gg/mahiruscript")
+        setclipboard("https://discord.gg/psychoscript")
         library:MakeNotification({
             Name = "Copied",
             Content = "Discord Copied!",
@@ -1308,11 +1308,11 @@ end)
 library:Init()
 
 library:MakeNotification({
-    Name = "Welcome to Mahiru Script!",
-    Content = "By LangitDev!",
+    Name = "Welcome to Psycho Script!",
+    Content = "By FadelSM!",
     Time = 5
 })
 
 print([[
-Mahiru Script V1
+Psycho Script V1
 ]])
