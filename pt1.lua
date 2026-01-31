@@ -1,5 +1,5 @@
 
--- DECRYPT BY MAHIRU mahiru
+-- DECRYPT BY FadelSM
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
