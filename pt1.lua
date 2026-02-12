@@ -1,6 +1,3 @@
-
--- DECRYPT BY FadelSM
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,7 +13,7 @@ local Stats = game:GetService("Stats")
 local Net = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
 local Remotes = {
     RE_FishCaught = Net:WaitForChild("RE/FishCaught"),
-    RE_Fishing = Net:WaitForChild("RE/FishingCompleted"),
+    RF_Fishing = Net:WaitForChild("RF/CatchFishCompleted"),
     RF_Charge = Net:WaitForChild("RF/ChargeFishingRod"),
     RF_Minigame = Net:WaitForChild("RF/RequestFishingMinigameStarted"),
     RF_Cancel = Net:WaitForChild("RF/CancelFishingInputs"),
@@ -75,21 +72,20 @@ local IsInstantFishing = false
 local IsBlatantFishing = false
 
 local IsBlatantV3 = false
-local V3_CastDelay     = 0.3   
-local V3_CancelDelay   = 3      
-local V3_CompleteDelay= 3      
+local CastDelay   = 0.3   
+local CancelDelay   = 3      
+local CompleteDelay = 0.8    
 local CurrentFishCount = 0
-
+local Throttle = 0.8
+local RecoveryEvery = 6
+local loopCount = 0
 
 local AutoSellMode = "Delay" 
 local AutoSellValue = 60
 local IsAutoSell = false
 local LastSellTick = 0
 
-local IsengV1_Enabled = false
-local IsengV2_Enabled = false
 local SelectedVictim = nil
-local IsengV3_Enabled = false
 local FrozenPlayers = {}
 
 local WebhookConfig = {
@@ -112,7 +108,6 @@ local IsMaxZoom = false
 local IsDisableVFX = false
 local IsDisableCutscene = false
 local IsDisableFishNotification = false
-
 
 local ESPEnabled = false
 local ESPObjects = {}
@@ -151,163 +146,282 @@ local SelectedLocation = nil
 local SelectedPlayer = nil
 local PlayerList = {}
 
-
 local function CreatePingFPSGui()
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "PsychoPingFPS"
-    gui.ResetOnSpawn = false
-    gui.Parent = game.CoreGui
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "PsychoPingFPS"
+    screenGui.ResetOnSpawn = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent = game.CoreGui
 
-    local frame = Instance.new("Frame", gui)
-    frame.Size = UDim2.new(0, 180, 0, 60)
+    local frame = Instance.new("Frame")
+    frame.Parent = screenGui
+    frame.Size = UDim2.new(0, 220, 0, 100)
     frame.Position = UDim2.new(0, 20, 0, 200)
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    frame.BackgroundTransparency = 0.3
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 40) 
+    frame.BackgroundTransparency = 0.2
     frame.BorderSizePixel = 0
     frame.Active = true
     frame.Draggable = true
 
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = frame
 
-    local title = Instance.new("TextLabel", frame)
-    title.Size = UDim2.new(1, -10, 0, 20)
-    title.Position = UDim2.new(0, 10, 0, 5)
-    title.BackgroundTransparency = 1
-    title.Text = "Psycho"
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 14
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.TextColor3 = Color3.fromRGB(255, 170, 170)
+    local glowStroke = Instance.new("UIStroke")
+    glowStroke.Color = Color3.fromRGB(255, 182, 193) 
+    glowStroke.Thickness = 2
+    glowStroke.Transparency = 0.3
+    glowStroke.Parent = frame
 
-    local line = Instance.new("Frame", frame)
-    line.Size = UDim2.new(1, -20, 0, 1)
-    line.Position = UDim2.new(0, 10, 0, 28)
-    line.BackgroundColor3 = Color3.fromRGB(100, 100, 120)
-    line.BorderSizePixel = 0
+    local headerFrame = Instance.new("Frame")
+    headerFrame.Parent = frame
+    headerFrame.Size = UDim2.new(1, 0, 0, 32)
+    headerFrame.BackgroundTransparency = 1
 
-    local info = Instance.new("TextLabel", frame)
-    info.Size = UDim2.new(1, -10, 0, 25)
-    info.Position = UDim2.new(0, 10, 0, 32)
-    info.BackgroundTransparency = 1
-    info.Font = Enum.Font.GothamMedium
-    info.TextSize = 14
-    info.TextXAlignment = Enum.TextXAlignment.Left
-    info.Text = "Ping: -- | FPS: --"
-    
-    local watermark = Instance.new("TextLabel", frame)
-    watermark.Size = UDim2.new(0, 40, 0, 15)
-    watermark.Position = UDim2.new(1, -45, 0, 5)
-    watermark.BackgroundTransparency = 1
-    watermark.Text = "FadelSM"
-    watermark.Font = Enum.Font.GothamBold
-    watermark.TextSize = 10
-    watermark.TextColor3 = Color3.fromRGB(255, 100, 100)
-    
-    local closeBtn = Instance.new("TextButton", frame)
+    local iconImage = Instance.new("ImageLabel")
+    iconImage.Parent = headerFrame
+    iconImage.Size = UDim2.new(0, 26, 0, 26)
+    iconImage.Position = UDim2.new(0, 8, 0, 3)
+    iconImage.BackgroundTransparency = 1
+    iconImage.Image = "rbxassetid://132435516080103"
+    iconImage.ImageColor3 = Color3.fromRGB(255, 255, 255)
+    iconImage.ScaleType = Enum.ScaleType.Fit
+
+    local titleText = Instance.new("TextLabel")
+    titleText.Parent = headerFrame
+    titleText.Size = UDim2.new(1, -40, 1, 0)
+    titleText.Position = UDim2.new(0, 40, 0, 0)
+    titleText.BackgroundTransparency = 1
+    titleText.Text = "Psycho Monitor"
+    titleText.Font = Enum.Font.GothamBold
+    titleText.TextSize = 14
+    titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleText.TextXAlignment = Enum.TextXAlignment.Left
+
+    local separator = Instance.new("Frame")
+    separator.Parent = frame
+    separator.Size = UDim2.new(1, -20, 0, 1)
+    separator.Position = UDim2.new(0, 10, 0, 34)
+    separator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    separator.BackgroundTransparency = 0.5
+    separator.BorderSizePixel = 0
+
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Parent = frame
+    contentFrame.Size = UDim2.new(1, -20, 0, 60)
+    contentFrame.Position = UDim2.new(0, 10, 0, 38)
+    contentFrame.BackgroundTransparency = 1
+
+    local row1 = Instance.new("Frame")
+    row1.Parent = contentFrame
+    row1.Size = UDim2.new(1, 0, 0, 25)
+    row1.BackgroundTransparency = 1
+
+    local pingLabel = Instance.new("TextLabel")
+    pingLabel.Name = "PingLabel"
+    pingLabel.Parent = row1
+    pingLabel.Size = UDim2.new(0.5, -5, 1, 0)
+    pingLabel.BackgroundTransparency = 1
+    pingLabel.Font = Enum.Font.GothamMedium
+    pingLabel.TextSize = 13
+    pingLabel.Text = "Ping: Loading..."
+    pingLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    pingLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local fpsLabel = Instance.new("TextLabel")
+    fpsLabel.Name = "FPSLabel"
+    fpsLabel.Parent = row1
+    fpsLabel.Size = UDim2.new(0.5, -5, 1, 0)
+    fpsLabel.Position = UDim2.new(0.5, 5, 0, 0)
+    fpsLabel.BackgroundTransparency = 1
+    fpsLabel.Font = Enum.Font.GothamMedium
+    fpsLabel.TextSize = 13
+    fpsLabel.Text = "FPS: Loading..."
+    fpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fpsLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+    local row2 = Instance.new("Frame")
+    row2.Parent = contentFrame
+    row2.Size = UDim2.new(1, 0, 0, 25)
+    row2.Position = UDim2.new(0, 0, 0, 30)
+    row2.BackgroundTransparency = 1
+
+    local notifLabel = Instance.new("TextLabel")
+    notifLabel.Name = "NotifLabel"
+    notifLabel.Parent = row2
+    notifLabel.Size = UDim2.new(1, 0, 1, 0)
+    notifLabel.BackgroundTransparency = 1
+    notifLabel.Font = Enum.Font.GothamMedium
+    notifLabel.TextSize = 13
+    notifLabel.Text = "Notification: 0"
+    notifLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    notifLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Parent = frame
     closeBtn.Size = UDim2.new(0, 20, 0, 20)
     closeBtn.Position = UDim2.new(1, -25, 0, 5)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     closeBtn.BackgroundTransparency = 0.8
-    closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-    closeBtn.Text = "-"
-    closeBtn.TextColor3 = Color3.fromRGB(255, 150, 150)
+    closeBtn.Text = "×"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 105, 180)
     closeBtn.Font = Enum.Font.GothamBold
-    closeBtn.TextSize = 12
+    closeBtn.TextSize = 16
     closeBtn.AutoButtonColor = false
-    
-    Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
-    
+
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 4)
+    closeCorner.Parent = closeBtn
+
     closeBtn.MouseButton1Click:Connect(function()
-        gui.Enabled = not gui.Enabled
-        closeBtn.Text = gui.Enabled and "X" or "▶"
+        screenGui:Destroy()
+        if updateConnection then updateConnection:Disconnect() end
+        if pingUpdateConnection then pingUpdateConnection:Disconnect() end
+        if notifUpdateConnection then notifUpdateConnection:Disconnect() end
     end)
-    
-    closeBtn.MouseEnter:Connect(function()
-        closeBtn.BackgroundTransparency = 0.5
-    end)
-    
-    closeBtn.MouseLeave:Connect(function()
-        closeBtn.BackgroundTransparency = 0.8
-    end)
-    
-    local fps = 0
-    local frames = 0
-    local lastTime = os.clock()
 
-    local conn
-    conn = RunService.RenderStepped:Connect(function()
-        frames = frames + 1
-        local now = os.clock()
-
-        if now - lastTime >= 0.5 then  
-            fps = math.floor(frames / (now - lastTime))
-            frames = 0
-            lastTime = now
-
-            local ping = math.floor(
-                Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
-            )
-            
-            local color
-            if ping < 100 and fps > 60 then
-                color = Color3.fromRGB(100, 255, 100)  
-                frame.BackgroundColor3 = Color3.fromRGB(30, 50, 30)
-            elseif ping < 200 and fps > 30 then
-                color = Color3.fromRGB(255, 255, 100)  
-                frame.BackgroundColor3 = Color3.fromRGB(50, 50, 30)
-            else
-                color = Color3.fromRGB(255, 100, 100) 
-                frame.BackgroundColor3 = Color3.fromRGB(50, 30, 30)
+    
+    local function getNotificationCount()
+        local success, count = pcall(function()
+            local notifications = PlayerGui:FindFirstChild("Text Notifications")
+            if notifications then
+                local frame = notifications:FindFirstChild("Frame")
+                if frame then
+                    local count = 0
+                    for _, child in pairs(frame:GetChildren()) do
+                        if child.Name == "Tile" then
+                            count = count + 1
+                        end
+                    end
+                    return count
+                end
             end
+            return 0
+        end)
+        return success and count or 0
+    end
 
-            info.TextColor3 = color
-            info.Text = string.format("Ping: %dms | FPS: %d", ping, fps)
-            
-            
-            if ping < 100 then
-                watermark.TextColor3 = Color3.fromRGB(100, 255, 100)
-            elseif ping < 300 then
-                watermark.TextColor3 = Color3.fromRGB(255, 255, 100)
-            else
-                watermark.TextColor3 = Color3.fromRGB(255, 100, 100)
+    
+    local fpsHistory = {}
+    local lastTime = tick()
+    
+    local function updateFPS()
+        local currentTime = tick()
+        local delta = currentTime - lastTime
+        lastTime = currentTime
+        
+        local currentFPS = 1 / delta
+        table.insert(fpsHistory, currentFPS)
+        
+        if #fpsHistory > 30 then
+            table.remove(fpsHistory, 1)
+        end
+        
+        local total = 0
+        for _, fps in ipairs(fpsHistory) do
+            total = total + fps
+        end
+        
+        local avgFPS = total / #fpsHistory
+        local roundedFPS = math.floor(avgFPS)
+        
+        fpsLabel.Text = "FPS: " .. roundedFPS
+        
+        
+        if roundedFPS >= 60 then
+            fpsLabel.TextColor3 = Color3.fromRGB(100, 255, 100) 
+        elseif roundedFPS >= 30 then
+            fpsLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+        else
+            fpsLabel.TextColor3 = Color3.fromRGB(255, 100, 100) 
+        end
+    end
+
+    
+    local function updatePing()
+        local success, ping = pcall(function()
+            local networkStats = Stats.Network.ServerStatsItem["Data Ping"]
+            if networkStats then
+                return math.floor(networkStats:GetValue())
             end
+            return math.floor(LocalPlayer:GetNetworkPing() * 1000)
+        end)
+        
+        local pingValue = success and ping or 0
+        pingLabel.Text = "Ping: " .. pingValue .. "ms"
+        
+        
+        if pingValue <= 80 then
+            pingLabel.TextColor3 = Color3.fromRGB(100, 255, 100) 
+        elseif pingValue <= 150 then
+            pingLabel.TextColor3 = Color3.fromRGB(255, 255, 100) 
+        else
+            pingLabel.TextColor3 = Color3.fromRGB(255, 100, 100) 
+        end
+    end
+
+    
+    local function updateNotifications()
+        local count = getNotificationCount()
+        notifLabel.Text = "Notification: " .. count
+        
+        notifLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+
+    
+    local updateConnection = RunService.RenderStepped:Connect(function()
+        if not screenGui or not screenGui.Parent then
+            updateConnection:Disconnect()
+            return
+        end
+        updateFPS()
+    end)
+
+    local lastPingUpdate = tick()
+    local pingUpdateConnection = RunService.Heartbeat:Connect(function()
+        if not screenGui or not screenGui.Parent then
+            pingUpdateConnection:Disconnect()
+            return
+        end
+        
+        local now = tick()
+        if now - lastPingUpdate >= 1 then 
+            updatePing()
+            lastPingUpdate = now
         end
     end)
-    
-    
+
+    local lastNotifUpdate = tick()
+    local notifUpdateConnection = RunService.Heartbeat:Connect(function()
+        if not screenGui or not screenGui.Parent then
+            notifUpdateConnection:Disconnect()
+            return
+        end
+        
+        local now = tick()
+        if now - lastNotifUpdate >= 0.5 then 
+            updateNotifications()
+            lastNotifUpdate = now
+        end
+    end)
+
     local hotkeyConnection
     hotkeyConnection = UserInputService.InputBegan:Connect(function(input)
         if input.KeyCode == Enum.KeyCode.F4 then
-            gui.Enabled = not gui.Enabled
-            closeBtn.Text = gui.Enabled and "X" or "▶"
+            screenGui.Enabled = not screenGui.Enabled
         end
     end)
-    
-    gui.Destroying:Once(function()
-        if conn then 
-            conn:Disconnect() 
-            conn = nil
-        end
-        if hotkeyConnection then
-            hotkeyConnection:Disconnect()
-            hotkeyConnection = nil
-        end
-        print("PingFPS successfully")
+
+    screenGui.Destroying:Once(function()
+        if updateConnection then updateConnection:Disconnect() end
+        if pingUpdateConnection then pingUpdateConnection:Disconnect() end
+        if notifUpdateConnection then notifUpdateConnection:Disconnect() end
+        if hotkeyConnection then hotkeyConnection:Disconnect() end
     end)
 
-    print("PingFPS created successfully!")
-    return gui
+    print("Psycho Monitor Loaded!")
+    return screenGui
 end
-
-
-function FormatNumber(num)
-    if num >= 1000000 then
-        return string.format("%.1fM", num / 1000000)
-    elseif num >= 1000 then
-        return string.format("%.0fK", num / 1000)
-    end
-    return tostring(num)
-end
-
 
 
 function GetFishCount()
@@ -394,7 +508,7 @@ function StartLegitFishing()
                 
                 task.wait(LegitFishingDelay)
                 pcall(function()
-                    Remotes.RE_Fishing:FireServer()
+                    Remotes.RF_Fishing:FireServer()
                 end)
 
                 task.wait(1.3)
@@ -406,35 +520,39 @@ function StartLegitFishing()
 end
 
 function StartInstantFishing()
+    if IsInstantFishing then return end
     IsInstantFishing = true
-    Remotes.RF_AutoFishing:InvokeServer(true)
+    
+    pcall(function()
+        Remotes.RF_AutoFishing:InvokeServer(false)
+    end)
     
     task.spawn(function()
         while IsInstantFishing do
-            local success, guid, power = pcall(function()
-                return Remotes.RF_Charge:InvokeServer(workspace:GetServerTimeNow())
+            pcall(function()
+                local serverTime = workspace:GetServerTimeNow()
+                local _, _, power = Remotes.RF_Charge:InvokeServer(serverTime)
+                
+                task.wait(0.1)
+                
+                Remotes.RF_Minigame:InvokeServer(-1, 0.99, power or 1.0)
+                
+                task.wait(CompleteDelay or 0.3)
+                
+                Remotes.RF_Fishing:FireServer()
+                
+                task.wait(0.2)
+                Remotes.RF_Cancel:InvokeServer()
             end)
             
-            if success and type(power) == "number" then
-                task.wait(0.3)
-                pcall(function()
-                    Remotes.RF_Minigame:InvokeServer(-1, 0.999, power)
-                end)
-                
-                task.wait(InstantFishingDelay)
-                pcall(function()
-                    Remotes.RE_Fishing:FireServer()
-                end)
-            end
-            
-            task.wait(0.05)
+            task.wait(InstantFishingDelay or 0.25)
         end
     end)
 end
 
 function StartBlatantFishingV3()
     IsBlatantFishing = true
-    Remotes.RF_AutoFishing:InvokeServer(true)
+    Remotes.RF_AutoFishing:InvokeServer(false)
     
     task.spawn(function()
         while IsBlatantFishing do
@@ -446,19 +564,19 @@ function StartBlatantFishingV3()
                     Remotes.RF_Minigame:InvokeServer(-1, 0.999)
                 end)
                 
-                task.wait(V3_CancelDelay)
+                task.wait(CancelDelay)
                 pcall(function()
-                    Remotes.RE_Fishing:FireServer()
+                    Remotes.RF_Fishing:FireServer()
                 end)
             
-            task.wait(V3_CompleteDelay)
+            task.wait(CompleteDelay)
         end
     end)
 end
 
 function StartBlatantFishingV2()
     IsBlatantFishing = true
-    Remotes.RF_AutoFishing:InvokeServer(true)
+    Remotes.RF_AutoFishing:InvokeServer(false)
     task.spawn(function()
         while IsBlatantFishing do
             pcall(function()
@@ -467,41 +585,89 @@ function StartBlatantFishingV2()
             local _, _, power = Remotes.RF_Charge:InvokeServer(workspace:GetServerTimeNow())
             Remotes.RF_Minigame:InvokeServer(-1, 0.999, power)
             task.wait(BlatantBaitDelay)
-            Remotes.RE_Fishing:FireServer()
+            Remotes.RF_Fishing:FireServer()
             task.wait(BlatantCastDelay)
         end
     end)
 end
 
 function StartBlatantFishing()
+    if IsBlatantFishing then return end
     IsBlatantFishing = true
-    Remotes.RF_AutoFishing:InvokeServer(true)
+    
+    local function FishCycle()
+        local t = workspace:GetServerTimeNow()
+        
+        task.spawn(function()
+            pcall(function()
+                Remotes.RF_Cancel:InvokeServer()
+            end)
+        end)
+        
+        task.spawn(function()
+            pcall(function()
+                Remotes.RF_Charge:InvokeServer(t)
+            end)
+        end)
+        
+        task.spawn(function()
+            pcall(function()
+                Remotes.RF_Minigame:InvokeServer(-1, 0.98, t)
+            end)
+        end)
+        
+        task.wait(CompleteDelay)
+        task.spawn(function()
+            pcall(function()
+                Remotes.RF_Fishing:FireServer()
+            end)
+        end)
+        
+        task.wait(CancelDelay)
+        task.spawn(function()
+            pcall(function()
+                Remotes.RF_Cancel:InvokeServer()
+            end)
+        end)
+    end
     
     task.spawn(function()
         while IsBlatantFishing do
+            FishCycle()
+            loopCount = loopCount + 1
+            
+            if loopCount >= RecoveryEvery then
+                task.spawn(function()
+                    pcall(function()
+                        Remotes.RF_Fishing:InvokeServer()
+                    end)
+                end)
+                loopCount = 0
+            end
+            
+            task.wait(Throttle)
+        end
+    end)
+    
+    Remotes.RF_Minigame.OnClientEvent:Connect(function(state)
+        if not IsBlatantFishing then return end
+        
+        if state == "FishCaught" then
             task.spawn(function()
+                task.wait(CompleteDelay)
+                pcall(function()
+                    Remotes.RF_Fishing:FireServer()
+                end)
+                task.wait(CancelDelay)
                 pcall(function()
                     Remotes.RF_Cancel:InvokeServer()
                 end)
-                
-                pcall(function()
-                    Remotes.RF_Charge:InvokeServer(workspace:GetServerTimeNow())
-                end)
-                
-                pcall(function()
-                    Remotes.RF_Minigame:InvokeServer(-1, 0.999)
-                end)
-                
-                task.wait(BlatantFishingDelay)
-                pcall(function()
-                    Remotes.RE_Fishing:FireServer()
-                end)
             end)
-            
-            task.wait(BlatantReelDelay)
         end
     end)
 end
+
+
 
 function StartAutoSell()
     IsAutoSell = true
@@ -627,26 +793,29 @@ end)
 
 local VirtualUserRef = cloneref(game:GetService("VirtualUser")) or game:GetService("VirtualUser")
 LocalPlayer.Idled:Connect(function()
-    VirtualUserRef:CaptureController()
-    VirtualUserRef:ClickButton2(Vector2.new())
+   VirtualUserRef:CaptureController()
+  VirtualUserRef:ClickButton2(Vector2.new())
 end)
 
-local PsychoUi = loadstring(game:HttpGet("https://raw.githubusercontent.com/TesterX14/XXXX/refs/heads/main/Library"))()
+local PsychoUi = loadstring(game:HttpGet('https://raw.githubusercontent.com/NitaKacung/kontol/refs/heads/main/main%20(1).lua'))()
+local Window = PsychoUi:CreateWindow({
+    Title = "Psycho",
+    Icon = "rbxassetid://92859841842468",
+    Author = "FadelDev",
+    Folder = "Psycho",
+    Size = UDim2.fromOffset(380, 260),
+    MinSize = Vector2.new(560, 350),
+    MaxSize = Vector2.new(850, 560),
+    Transparent = true,
+    Theme = "Dark",
+    Resizable = true,
+    SideBarWidth = 200,
+    BackgroundImageTransparency = 0.42,
+    HideSearchBar = true,
+    ScrollBarEnabled = false,
+})
 
-local WindowConfig = {
-    Title = "Psycho Script",
-    Footer = "Version 1.0.0",
-    Image = "78018573702743",
-    Color = Color3.fromRGB(0, 208, 255),
-    Theme = 9542022979,
-    Version = 4,
-}
-
-local MainWindow = PsychoUi:Window(WindowConfig)
-if MainWindow then
-end
-
-local ConfigManager = MainWindow.ConfigManager:CreateConfig("psychoconfig")
+local ConfigManager = Window.ConfigManager:CreateConfig("psychoconfig")
 
 local function CreateToggleButton()
     local screenGui = Instance.new("ScreenGui")
@@ -659,7 +828,7 @@ local function CreateToggleButton()
     button.Size = UDim2.new(0, 40, 0, 40)
     button.Position = UDim2.new(0, 20, 0, 100)
     button.BackgroundTransparency = 1
-    button.Image = "rbxassetid://91069103989932"
+    button.Image = "rbxassetid://132435516080103"
     button.ScaleType = Enum.ScaleType.Fit
     
     local corner = Instance.new("UICorner")
@@ -667,7 +836,7 @@ local function CreateToggleButton()
     corner.Parent = button
      
     button.MouseButton1Click:Connect(function()
-        MainWindow:Toggle()
+        Window:Toggle()
     end)
     
     local dragging = false
@@ -697,42 +866,41 @@ end
 
 CreateToggleButton()
 
-MainWindow:SetToggleKey(Enum.KeyCode.F3)
-MainWindow:IsResizable(true)
+Window:SetToggleKey(Enum.KeyCode.F3)
+Window:IsResizable(true)
 
-local Tabs = {}
-Tabs.InfoTab = MainWindow:Tab({Title = "Info", Icon = "info"})
-Tabs.PlayerTab = MainWindow:Tab({Title = "Player", Icon = "users"})
-Tabs.FishingTab = MainWindow:Tab({Title = "Fishing", Icon = "rbxassetid://103247953194129"})
-Tabs.AutomaticTab = MainWindow:Tab({Title = "Automatic", Icon = "rbxassetid://12662718374"})
-Tabs.WebhookTab = MainWindow:Tab({Title = "Webhook", Icon = "rbxassetid://137601480983962"})
-Tabs.QuestTab = MainWindow:Tab({Title = "Quest", Icon = "rbxassetid://114127804740858"})
-Tabs.UtilitiesTab = MainWindow:Tab({Title = "Utilities", Icon = "box"})
-Tabs.ShopTab = MainWindow:Tab({Title = "Shop", Icon = "shopping-cart"})
-Tabs.TeleportTab = MainWindow:Tab({Title = "Teleport", Icon = "map"})
+local InfoTab = Window:Tab({Title = "Info", Icon = "info"})
+local PlayerTab = Window:Tab({Title = "Player", Icon = "users"})
+local FishingTab = Window:Tab({Title = "Fishing", Icon = "rbxassetid://103247953194129"})
+local AutomaticTab = Window:Tab({Title = "Automatic", Icon = "rbxassetid://12662718374"})
+local WebhookTab = Window:Tab({Title = "Webhook", Icon = "rbxassetid://137601480983962"})
+local QuestTab = Window:Tab({Title = "Quest", Icon = "rbxassetid://114127804740858"})
+local UtilitiesTab = Window:Tab({Title = "Utilities", Icon = "box"})
+local ShopTab = Window:Tab({Title = "Shop", Icon = "shopping-cart"})
+local TeleportTab = Window:Tab({Title = "Teleport", Icon = "map"})
 
-Tabs.InfoTab:AddParagraph({
+InfoTab:Paragraph({
     Title = "Psycho Alert!",
-    Desc = "Welcome To Script Psycho, By FadelSM",
+    Desc = "Welcome To Script Psycho, By FadelDev",
     Color = "Green",
     Image = "rbxassetid://12633176980",
     ImageSize = 30,
 })
 
-Tabs.InfoTab:AddButton({
+InfoTab:Button({
     Title = "Need Help?",
     Desc = "Click This To Copy Discord Link.\nJoin to <font color=\"#FF90E3\">Discord Psycho</font>!",
     Callback = function()
         if setclipboard then
-            setclipboard("discord.gg/psychoscript")
-            MainWindow:Notify({
+            setclipboard("discord.gg/HHUapJnE")
+            PsychoUi:Notify({
                 Title = "Success",
                 Content = "Discord link copied to clipboard!",
                 Duration = 3,
                 Icon = "laptop-minimal-check",
             })
         else
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Error",
                 Content = "Executor doesn't support clipboard!",
                 Duration = 3,
@@ -742,7 +910,7 @@ Tabs.InfoTab:AddButton({
     end,
 })
 
-Tabs.InfoTab:Space()
+InfoTab:Space()
 
 local function RejoinServer()
     TeleportService:Teleport(game.PlaceId, LocalPlayer)
@@ -778,7 +946,7 @@ local function ServerHop()
     if #servers > 0 then
         TeleportService:TeleportToPlaceInstance(placeId, servers[math.random(1, #servers)], LocalPlayer)
     else
-        MainWindow:Notify({
+        PsychoUi:Notify({
             Title = "Error",
             Content = "No servers available or all are full",
             Duration = 2.5,
@@ -787,37 +955,38 @@ local function ServerHop()
     end
 end
 
-Tabs.InfoTab:AddButton({
+InfoTab:Button({
     Title = "Rejoin Server",
     Callback = RejoinServer
 })
 
-Tabs.InfoTab:AddButton({
+InfoTab:Button({
     Title = "Server Hop",
     Desc = "Join a new server",
     Callback = ServerHop
 })
 
-local InterfaceSection = Tabs.PlayerTab:AddSection({Title = "User Interface"})
-local ThemeToggle = InterfaceSection:AddToggle({
+local InterfaceSection = PlayerTab:Section({Title = "User Interface"})
+local ThemeToggle = InterfaceSection:Toggle({
     Title = "Change Theme",
     Desc = "Dark = OFF | Light = ON",
     Value = false,
     Callback = function(value)
         if value then
-            MainWindow:SetTheme("Light Theme")
+            PsychoUi:SetTheme("Light Theme")
         else
-            MainWindow:SetTheme("Dark Theme")
+            PsychoUi:SetTheme("Dark Theme")
         end
     end,
 })
 ConfigManager:Register("themeToggle", ThemeToggle)
 
-local PfpsSection = Tabs.PlayerTab:AddSection({Title = "Tools Fps Booster"})
+local PfpsSection = PlayerTab:Section({Title = "Tools Fps Booster"})
 
 local StatsGui
 
-local PerfomToggle = PfpsSection:AddToggle({
+
+local PerfomToggle = PfpsSection:Toggle({
     Title = "Show Ping & FPS",
     Default = false,
     Callback = function(state)
@@ -833,7 +1002,7 @@ local PerfomToggle = PfpsSection:AddToggle({
 })
 ConfigManager:Register("PerfomToggle", PerfomToggle)
 
-local FPSBoostToggle = PfpsSection:AddToggle({
+local FPSBoostToggle = PfpsSection:Toggle({
     Title = "FPS Booster",
     Default = false,
     Callback = function(state)
@@ -848,8 +1017,8 @@ local FPSBoostToggle = PfpsSection:AddToggle({
 ConfigManager:Register("FPSBoostToggle", FPSBoostToggle)
 
 
-local MovementSection = Tabs.PlayerTab:AddSection({Title = "Movement"})
-local WalkSpeedSlider = MovementSection:AddSlider({
+local MovementSection = PlayerTab:Section({Title = "Movement"})
+local WalkSpeedSlider = MovementSection:Slider({
     Title = "WalkSpeed",
     Step = 1,
     Value = {Min = 16, Max = 200, Default = 16},
@@ -860,7 +1029,7 @@ local WalkSpeedSlider = MovementSection:AddSlider({
     end,
 })
 
-local JumpPowerSlider = MovementSection:AddSlider({
+local JumpPowerSlider = MovementSection:Slider({
     Title = "JumpPower",
     Step = 1,
     Value = {Min = 50, Max = 500, Default = 50},
@@ -871,7 +1040,7 @@ local JumpPowerSlider = MovementSection:AddSlider({
     end,
 })
 
-MovementSection:AddButton({
+MovementSection:Button({
     Title = "Reset Speed And Jump",
     Callback = function()
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
@@ -879,7 +1048,7 @@ MovementSection:AddButton({
             LocalPlayer.Character.Humanoid.JumpPower = 50
             WalkSpeedSlider:Set(16)
             JumpPowerSlider:Set(50)
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Success",
                 Content = "Speed and jump reset successfully",
                 Duration = 2.5,
@@ -891,7 +1060,7 @@ MovementSection:AddButton({
 
 MovementSection:Divider()
 
-local FlySpeedSlider = MovementSection:AddSlider({
+local FlySpeedSlider = MovementSection:Slider({
     Title = "Fly Speed",
     Step = 1,
     Value = {Min = 1, Max = 10, Default = 1},
@@ -900,7 +1069,7 @@ local FlySpeedSlider = MovementSection:AddSlider({
     end,
 })
 
-local FlyToggle = MovementSection:AddToggle({
+local FlyToggle = MovementSection:Toggle({
     Title = "Enable Fly",
     Value = false,
     Callback = function(value)
@@ -976,9 +1145,9 @@ local FlyToggle = MovementSection:AddToggle({
     end,
 })
 
-local ModesSection = Tabs.PlayerTab:AddSection({Title = "Modes"})
+local ModesSection = PlayerTab:Section({Title = "Modes"})
 
-local NoAnimationToggle = ModesSection:AddToggle({
+local NoAnimationToggle = ModesSection:Toggle({
     Title = "No Animations",
     Value = false,
     Callback = function(value)
@@ -1009,7 +1178,7 @@ local NoAnimationToggle = ModesSection:AddToggle({
                 end
             end
             
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "No Animation",
                 Content = "Animations disabled",
                 Duration = 2,
@@ -1028,7 +1197,7 @@ local NoAnimationToggle = ModesSection:AddToggle({
                 end
             end
             
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "No Animation",
                 Content = "Animations enabled",
                 Duration = 2,
@@ -1039,7 +1208,7 @@ local NoAnimationToggle = ModesSection:AddToggle({
 })
 ConfigManager:Register("noAnimationToggle", NoAnimationToggle)
 
-ModesSection:AddToggle({
+ModesSection:Toggle({
     Title = "Hide Rod On Hand",
     Desc = "This feature makes rod invisible! and hides other player's rods too",
     Value = false,
@@ -1063,7 +1232,7 @@ ModesSection:AddToggle({
 
 ModesSection:Divider()
 
-local InfiniteJumpToggle = ModesSection:AddToggle({
+local InfiniteJumpToggle = ModesSection:Toggle({
     Title = "Infinite Jump",
     Value = false,
     Callback = function(value)
@@ -1077,13 +1246,13 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-local NoClipToggle = ModesSection:AddToggle({
+local NoClipToggle = ModesSection:Toggle({
     Title = "Noclip",
     Value = false,
     Callback = function(value)
         IsNoClip = value
         if value then
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Success",
                 Content = "Noclip enabled",
                 Duration = 2.5,
@@ -1103,7 +1272,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
-local WalkOnWaterToggle = ModesSection:AddToggle({
+local WalkOnWaterToggle = ModesSection:Toggle({
     Title = "Walk On Water",
     Value = false,
     Callback = function(value)
@@ -1132,7 +1301,7 @@ local WalkOnWaterToggle = ModesSection:AddToggle({
     end,
 })
 
-local MaxZoomToggle = ModesSection:AddToggle({
+local MaxZoomToggle = ModesSection:Toggle({
     Title = "Max Zoom 1000",
     Desc = "Increase max camera distance",
     Value = false,
@@ -1153,9 +1322,9 @@ local MaxZoomToggle = ModesSection:AddToggle({
     end,
 })
 
-local BoostSection = Tabs.PlayerTab:AddSection({Title = "Boost Player"})
+local BoostSection = PlayerTab:Section({Title = "Boost Player"})
 
-local DisableVFXToggle = BoostSection:AddToggle({
+local DisableVFXToggle = BoostSection:Toggle({
     Title = "Disable VFX",
     Value = false,
     Callback = function(value)
@@ -1176,7 +1345,7 @@ local DisableVFXToggle = BoostSection:AddToggle({
     end,
 })
 
-local DisableCutsceneToggle = BoostSection:AddToggle({
+local DisableCutsceneToggle = BoostSection:Toggle({
     Title = "Disable Cutscene",
     Value = false,
     Callback = function(value)
@@ -1193,7 +1362,7 @@ local DisableCutsceneToggle = BoostSection:AddToggle({
 })
 ConfigManager:Register("cutsceneToggle", DisableCutsceneToggle)
 
-local DisableFishNotificationToggle = BoostSection:AddToggle({
+local DisableFishNotificationToggle = BoostSection:Toggle({
     Title = "Disable Obtained Fish",
     Value = false,
     Callback = function(value)
@@ -1206,9 +1375,9 @@ local DisableFishNotificationToggle = BoostSection:AddToggle({
 })
 ConfigManager:Register("obtainedFishToggle", DisableFishNotificationToggle)
 
-local RenderSection = Tabs.PlayerTab:AddSection({Title = "Rendering"})
+local RenderSection = PlayerTab:Section({Title = "Rendering"})
 
-RenderSection:AddToggle({
+RenderSection:Toggle({
     Title = "Reduce Map",
     Desc = "Don't turn this on with Disable 3D Render",
     Value = false,
@@ -1242,12 +1411,12 @@ RenderSection:AddToggle({
     end,
 })
 
-RenderSection:AddToggle({
+RenderSection:Toggle({
     Title = "Disable 3D Rendering",
     Value = false,
     Callback = function(value)
         RunService:Set3dRenderingEnabled(not value)
-        MainWindow:Notify({
+        PsychoUi:Notify({
             Title = value and "Disabled" or "Enabled",
             Content = value and "3D Render disabled" or "3D Render enabled",
             Duration = 2.5,
@@ -1256,7 +1425,7 @@ RenderSection:AddToggle({
     end,
 })
 
-local ESPToggle = RenderSection:AddToggle({
+local ESPToggle = RenderSection:Toggle({
     Title = "Player ESP",
     Value = false,
     Callback = function(value)
@@ -1320,7 +1489,7 @@ local ESPToggle = RenderSection:AddToggle({
     end,
 })
 
-local HideIdentSection = Tabs.PlayerTab:AddSection({Title = "Identity"})
+local HideIdentSection = PlayerTab:Section({Title = "Identity"})
 
 local function SetupIdentity()
     local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -1383,7 +1552,7 @@ local function ShowIdentity()
     IdentityElements.Watermark.Visible = false
 end
 
-local NameChangerInput = HideIdentSection:AddInput({
+local NameChangerInput = HideIdentSection:Input({
     Title = "Name Changer",
     Value = "",
     Placeholder = "Psycho",
@@ -1393,7 +1562,7 @@ local NameChangerInput = HideIdentSection:AddInput({
 })
 ConfigManager:Register("nameChangerInput", NameChangerInput)
 
-local LevelChangerInput = HideIdentSection:AddInput({
+local LevelChangerInput = HideIdentSection:Input({
     Title = "Level Changer",
     Value = "",
     Placeholder = "Lvl: ",
@@ -1403,7 +1572,7 @@ local LevelChangerInput = HideIdentSection:AddInput({
 })
 ConfigManager:Register("levelChangerInput", LevelChangerInput)
 
-local IdentityToggle = HideIdentSection:AddToggle({
+local IdentityToggle = HideIdentSection:Toggle({
     Title = "Start Hide Identity",
     Value = false,
     Callback = function(value)
@@ -1431,7 +1600,7 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-HideIdentSection:AddButton({
+HideIdentSection:Button({
     Title = "Reset Character In Place",
     Callback = function()
         local character = LocalPlayer.Character
@@ -1447,7 +1616,7 @@ HideIdentSection:AddButton({
         task.wait(0.2)
         LocalPlayer.Character:WaitForChild("HumanoidRootPart").CFrame = position
         
-        MainWindow:Notify({
+        PsychoUi:Notify({
             Title = "Success",
             Content = "Character reset in same location!",
             Duration = 2.5,
@@ -1458,9 +1627,9 @@ HideIdentSection:AddButton({
 
 SetupIdentity()
 
-local FishingSection = Tabs.FishingTab:AddSection({Title = "Auto Fishing"})
+local FishingSection = FishingTab:Section({Title = "Auto Fishing"})
 
-local LegitDelayInput = FishingSection:AddInput({
+local LegitDelayInput = FishingSection:Input({
     Title = "Legit Delay",
     Desc = "Delay complete fishing!",
     Value = "",
@@ -1474,7 +1643,7 @@ local LegitDelayInput = FishingSection:AddInput({
 })
 ConfigManager:Register("legitInput", LegitDelayInput)
 
-local ShakeDelayInput = FishingSection:AddInput({
+local ShakeDelayInput = FishingSection:Input({
     Title = "Shake Delay",
     Value = "",
     Placeholder = "Default: 0.15",
@@ -1487,7 +1656,7 @@ local ShakeDelayInput = FishingSection:AddInput({
 })
 ConfigManager:Register("shakeInput", ShakeDelayInput)
 
-local LegitFishingToggle = FishingSection:AddToggle({
+local LegitFishingToggle = FishingSection:Toggle({
     Title = "Legit Fishing",
     Value = false,
     Callback = function(value)
@@ -1501,7 +1670,7 @@ local LegitFishingToggle = FishingSection:AddToggle({
 })
 ConfigManager:Register("LegitFishingToggle", LegitFishingToggle)
 
-local AutoShakeToggle = FishingSection:AddToggle({
+local AutoShakeToggle = FishingSection:Toggle({
     Title = "Auto Shake",
     Desc = "Spam click during fishing (only legit)",
     Value = false,
@@ -1526,9 +1695,9 @@ local AutoShakeToggle = FishingSection:AddToggle({
 })
 ConfigManager:Register("autoShakeToggle", AutoShakeToggle)
 
-Tabs.FishingTab:AddSection({Title = "Instant Fishing"})
+FishingTab:Section({Title = "Instant Fishing"})
 
-Tabs.FishingTab:AddParagraph({
+FishingTab:Paragraph({
     Title = "Instant Fishing Settings",
     Desc = "For instant fishing, you must first set the completion delay. The default is 0.1.",
     Color = "Green",
@@ -1536,20 +1705,20 @@ Tabs.FishingTab:AddParagraph({
     ImageSize = 30,
 })
 
-local InstantDelayInput = Tabs.FishingTab:AddInput({
+local InstantDelayInput = FishingTab:Input({
     Title = "Delay Complete",
     Value = "",
     Placeholder = "Default: 0.1",
     Callback = function(value)
         local num = tonumber(value)
         if num and num > 0 then
-            InstantFishingDelay = num
+            CompleteDelay = num
         end
     end,
 })
 ConfigManager:Register("instantDelayCompleteValue", InstantDelayInput)
 
-local InstantFishingToggle = Tabs.FishingTab:AddToggle({
+local InstantFishingToggle = FishingTab:Toggle({
     Title = "Instant Fishing",
     Desc = "Auto instantly catch fish",
     Value = false,
@@ -1564,7 +1733,7 @@ local InstantFishingToggle = Tabs.FishingTab:AddToggle({
 })
 ConfigManager:Register("instantToggle", InstantFishingToggle)
 
-Tabs.FishingTab:AddToggle({
+FishingTab:Toggle({
     Title = "Talon Fishing",
     Desc = "Auto In Game Fishing + Auto Shake",
     Value = false,
@@ -1591,9 +1760,9 @@ Tabs.FishingTab:AddToggle({
     end,
 })
 
-Tabs.FishingTab:AddSection({Title = "Blatant V1"})
+FishingTab:Section({Title = "Blatant V1"})
 
-local BlatantReelInput = Tabs.FishingTab:AddInput({
+local BlatantReelInput = FishingTab:Input({
     Title = "Delay Reel",
     Desc = "Reel Timing (e.g. 1.9)",
     Value = "",
@@ -1601,13 +1770,13 @@ local BlatantReelInput = Tabs.FishingTab:AddInput({
     Callback = function(value)
         local num = tonumber(value)
         if num and num > 0 then
-            BlatantReelDelay = num
+            CompleteDelay = num
         end
     end,
 })
 ConfigManager:Register("blatantReelInput", BlatantReelInput)
 
-local BlatantFishInput = Tabs.FishingTab:AddInput({
+local BlatantFishInput = FishingTab:Input({
     Title = "Delay Fishing",
     Desc = "Fishing Timing (e.g. 1.1)",
     Value = "",
@@ -1615,13 +1784,13 @@ local BlatantFishInput = Tabs.FishingTab:AddInput({
     Callback = function(value)
         local num = tonumber(value)
         if num and num > 0 then
-            BlatantFishingDelay = num
+            CancelDelay = num
         end
     end,
 })
 ConfigManager:Register("blatantFishInput", BlatantFishInput)
 
-local BlatantFishingToggle = Tabs.FishingTab:AddToggle({
+local BlatantFishingToggle = FishingTab:Toggle({
     Title = "Blatant Fishing",
     Value = false,
     Callback = function(value)
@@ -1635,7 +1804,9 @@ local BlatantFishingToggle = Tabs.FishingTab:AddToggle({
 })
 ConfigManager:Register("blatantToggle", BlatantFishingToggle)
 
-Tabs.FishingTab:AddButton({
+
+
+FishingTab:Button({
     Title = "Recovery Fishing",
     Callback = function()
         pcall(function()
@@ -1644,9 +1815,9 @@ Tabs.FishingTab:AddButton({
     end,
 })
 
-Tabs.FishingTab:AddSection({Title = "Blatant V2"})
+FishingTab:Section({Title = "Blatant V2"})
 
-local BlatantBaitInput = Tabs.FishingTab:AddInput({
+local BlatantBaitInput = FishingTab:Input({
     Title = "Bait Delay",
     Desc = "Delay sebelum charge (e.g. 0.05 = ultra fast)",
     Value = "0.3",
@@ -1660,7 +1831,7 @@ local BlatantBaitInput = Tabs.FishingTab:AddInput({
 })
 ConfigManager:Register("blatantBaitInput", BlatantBaitInput)
 
-local BlatantCastInput = Tabs.FishingTab:AddInput({
+local BlatantCastInput = FishingTab:Input({
     Title = "Cast Delay", 
     Desc = "Delay sebelum minigame (e.g. 0.1 = instant)",
     Value = "0.70",
@@ -1674,7 +1845,7 @@ local BlatantCastInput = Tabs.FishingTab:AddInput({
 })
 ConfigManager:Register("blatantCastInput", BlatantCastInput)
 
-local BlatantFishingV2Toggle = Tabs.FishingTab:AddToggle({
+local BlatantFishingV2Toggle = FishingTab:Toggle({
     Title = "Blatant Fishing",
     Value = false,
     Callback = function(value)
@@ -1688,9 +1859,9 @@ local BlatantFishingV2Toggle = Tabs.FishingTab:AddToggle({
 })
 ConfigManager:Register("blatantV2Toggle", BlatantFishingV2Toggle)
 
-Tabs.FishingTab:AddSection({Title = "Blatant V3"})
+FishingTab:Section({Title = "Blatant V3"})
 
-local BlatantcancelInput = Tabs.FishingTab:AddInput({
+local BlatantcancelInput = FishingTab:Input({
     Title = "Cancel Delay",
     Desc = "Delay sebelum charge (e.g. 0.05 = ultra fast)",
     Value = "0.3",
@@ -1698,13 +1869,13 @@ local BlatantcancelInput = Tabs.FishingTab:AddInput({
     Callback = function(value)
         local num = tonumber(value)
         if num and num >= 0 then
-            V3_CancelDelay = num
+            CancelDelay = num
         end
     end,
 })
 ConfigManager:Register("blatantcancelInput", BlatantBaitInput)
 
-local BlatantCompleteInput = Tabs.FishingTab:AddInput({
+local BlatantCompleteInput = FishingTab:Input({
     Title = "Complete Delay", 
     Desc = "Delay sebelum minigame (e.g. 0.1 = instant)",
     Value = "0.70",
@@ -1712,13 +1883,13 @@ local BlatantCompleteInput = Tabs.FishingTab:AddInput({
     Callback = function(value)
         local num = tonumber(value)
         if num and num >= 0 then
-            V3_CompleteDelay = num
+            CompleteDelay = num
         end
     end,
 })
 ConfigManager:Register("blatantCompleteInput", BlatantCastInput)
 
-local BlatantFishingV3Toggle = Tabs.FishingTab:AddToggle({
+local BlatantFishingV3Toggle = FishingTab:Toggle({
     Title = "Blatant Fishing V3",
     Value = false,
     Callback = function(value)
@@ -1732,9 +1903,9 @@ local BlatantFishingV3Toggle = Tabs.FishingTab:AddToggle({
 })
 ConfigManager:Register("blatantV3Toggle", BlatantFishingV3Toggle)
 
-local SellSection = Tabs.AutomaticTab:AddSection({Title = "Auto Sell"})
+local SellSection = AutomaticTab:Section({Title = "Auto Sell"})
 
-SellSection:AddDropdown({
+SellSection:Dropdown({
     Title = "Select Sell Mode",
     Values = {"Delay", "Count"},
     Value = "Delay",
@@ -1743,7 +1914,7 @@ SellSection:AddDropdown({
     end,
 })
 
-SellSection:AddInput({
+SellSection:Input({
     Title = "Sell Value",
     Desc = "Delay = Minute | Count = Fish Count",
     Value = "60",
@@ -1757,7 +1928,7 @@ SellSection:AddInput({
     end,
 })
 
-SellSection:AddToggle({
+SellSection:Toggle({
     Title = "Auto Sell All",
     Value = false,
     Callback = function(value)
@@ -1769,9 +1940,9 @@ SellSection:AddToggle({
     end,
 })
 
-local WeatherSection = Tabs.AutomaticTab:AddSection({Title = "Auto Buy Weather"})
+local WeatherSection = AutomaticTab:Section({Title = "Auto Buy Weather"})
 
-local WeatherDropdown = WeatherSection:AddDropdown({
+local WeatherDropdown = WeatherSection:Dropdown({
     Title = "Select Weather",
     Desc = "",
     Values = {
@@ -1796,7 +1967,7 @@ local WeatherDropdown = WeatherSection:AddDropdown({
 })
 ConfigManager:Register("weatherDropdown", WeatherDropdown)
 
-local WeatherToggle = WeatherSection:AddToggle({
+local WeatherToggle = WeatherSection:Toggle({
     Title = "Auto Buy Weather",
     Value = false,
     Callback = function(value)
@@ -1830,7 +2001,7 @@ local WeatherToggle = WeatherSection:AddToggle({
 })
 ConfigManager:Register("weatherToggle", WeatherToggle)
 
-local EventSection = Tabs.AutomaticTab:AddSection({Title = "Event Features"})
+local EventSection = AutomaticTab:Section({Title = "Event Features"})
 
 local function GetActiveEvents()
     local events = {}
@@ -1903,7 +2074,7 @@ local function FindEventPart(eventName)
     return nil
 end
 
-local EventDropdown = EventSection:AddDropdown({
+local EventDropdown = EventSection:Dropdown({
     Title = "Select Event",
     Values = GetActiveEvents() or {},
     Callback = function(value)
@@ -1911,7 +2082,7 @@ local EventDropdown = EventSection:AddDropdown({
     end,
 })
 
-local EventToggle = EventSection:AddToggle({
+local EventToggle = EventSection:Toggle({
     Title = "Auto Event",
     Value = false,
     Callback = function(value)
@@ -1952,7 +2123,7 @@ local EventToggle = EventSection:AddToggle({
     end,
 })
 
-local FavoriteSection = Tabs.AutomaticTab:AddSection({Title = "Favorite Features"})
+local FavoriteSection = AutomaticTab:Section({Title = "Favorite Features"})
 
 local FishNames = {}
 for _, fish in pairs(FishData) do
@@ -1960,7 +2131,7 @@ for _, fish in pairs(FishData) do
 end
 table.sort(FishNames)
 
-local NameDropdown = FavoriteSection:AddDropdown({
+local NameDropdown = FavoriteSection:Dropdown({
     Title = "Name",
     Desc = "Favorite By Name Fish (Recommended)",
     Values = #FishNames > 0 and FishNames or {"No Fish Found"},
@@ -1976,14 +2147,14 @@ local NameDropdown = FavoriteSection:AddDropdown({
     end,
 })
 
-FavoriteSection:AddButton({
+FavoriteSection:Button({
     Title = "Refresh Fish",
     Callback = function()
         NameDropdown:Refresh(FishNames)
     end,
 })
 
-FavoriteSection:AddDropdown({
+FavoriteSection:Dropdown({
     Title = "Rarity",
     Desc = "Favorite By Rarity (Optional)",
     Values = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Secret"},
@@ -1999,7 +2170,7 @@ FavoriteSection:AddDropdown({
     end,
 })
 
-FavoriteSection:AddDropdown({
+FavoriteSection:Dropdown({
     Title = "Variant",
     Desc = "Favorite By Variant (Only works with Name)",
     Values = {"Galaxy", "Corrupt", "Gemstone", "Ghost", "Lightning", "Fairy Dust", "Gold", "Midnight", "Radioactive", "Stone", "Holographic", "Albino", "Bloodmoon", "Sandy", "Acidic", "Color Burn", "Festive", "Frozen"},
@@ -2020,7 +2191,7 @@ FavoriteSection:AddDropdown({
     end,
 })
 
-local AutoFavoriteToggle = FavoriteSection:AddToggle({
+local AutoFavoriteToggle = FavoriteSection:Toggle({
     Title = "Auto Favorite",
     Value = false,
     Callback = function(value)
@@ -2076,7 +2247,7 @@ local AutoFavoriteToggle = FavoriteSection:AddToggle({
     end,
 })
 
-FavoriteSection:AddButton({
+FavoriteSection:Button({
     Title = "Unfavorite All",
     Callback = function()
         local inventory = PlayerData:GetExpect({"Inventory", "Items"}) or {}
@@ -2089,9 +2260,9 @@ FavoriteSection:AddButton({
     end,
 })
 
-local SPSection = Tabs.AutomaticTab:AddSection({Title = "Save Position Features"})
+local SPSection = AutomaticTab:Section({Title = "Save Position Features"})
 
-SPSection:AddParagraph({
+SPSection:Paragraph({
     Title = "Guide Teleport",
     Desc = [[
 <b><font color="rgb(0,162,255)">AUTO TELEPORT?</font></b>
@@ -2135,33 +2306,33 @@ local function TeleportToLastPosition()
     if savedPosition then
         task.wait(2)
         rootPart.CFrame = savedPosition
-        MainWindow:Notify({
+        PsychoUi:Notify({
             Title = "Teleported to your last position...",
         })
     end
 end
 
-SPSection:AddButton({
+SPSection:Button({
     Title = "Save Position",
     Callback = function()
         local character = LocalPlayer.Character
         local rootPart = character and character:FindFirstChild("HumanoidRootPart")
         if rootPart then
             SavePosition(rootPart.CFrame)
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Position saved successfully!",
             })
         end
     end,
 })
 
-SPSection:AddButton({
+SPSection:Button({
     Title = "Reset Position",
     Callback = function()
         if isfile("Psycho/FishIt/Position.json") then
             delfile("Psycho/FishIt/Position.json")
         end
-        MainWindow:Notify({
+        PsychoUi:Notify({
             Title = "Last position has been reset!",
         })
     end,
@@ -2172,9 +2343,9 @@ if LocalPlayer.Character then
     TeleportToLastPosition()
 end
 
-local EnchantSection = Tabs.AutomaticTab:AddSection({Title = "Enchant Features"})
+local EnchantSection = AutomaticTab:Section({Title = "Enchant Features"})
 
-local EnchantStatus = EnchantSection:AddParagraph({
+local EnchantStatus = EnchantSection:Paragraph({
     Title = "Enchant Status",
     Desc = "Current Rod : None\nCurrent Enchant : None\nEnchant Stones Left : 0",
 })
@@ -2219,7 +2390,7 @@ local function GetEnchantInfo(stoneId)
     return rodName, enchantName, stoneCount, stoneUUIDs
 end
 
-EnchantSection:AddButton({
+EnchantSection:Button({
     Title = "Click Enchant",
     Callback = function()
         task.spawn(function()
@@ -2265,7 +2436,7 @@ EnchantSection:AddButton({
     end,
 })
 
-EnchantSection:AddButton({
+EnchantSection:Button({
     Title = "Teleport Enchant Altar",
     Callback = function()
         local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -2283,7 +2454,7 @@ EnchantSection:AddButton({
 
 EnchantSection:Divider()
 
-EnchantSection:AddButton({
+EnchantSection:Button({
     Title = "Click Double Enchant",
     Desc = "Starting Double Enchanting",
     Callback = function()
@@ -2330,7 +2501,7 @@ EnchantSection:AddButton({
     end,
 })
 
-EnchantSection:AddButton({
+EnchantSection:Button({
     Title = "Teleport Second Enchant Altar",
     Callback = function()
         local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -2346,9 +2517,9 @@ EnchantSection:AddButton({
     end,
 })
 
-Tabs.WebhookTab:AddSection({Title = "Webhook Fish Caught"})
+WebhookTab:Section({Title = "Webhook Fish Caught"})
 
-local WebhookURLInput = Tabs.WebhookTab:AddInput({
+local WebhookURLInput = WebhookTab:Input({
     Title = "Webhook URL",
     Value = "",
     Placeholder = "Input Here",
@@ -2358,7 +2529,7 @@ local WebhookURLInput = Tabs.WebhookTab:AddInput({
 })
 ConfigManager:Register("webhookURLInput", WebhookURLInput)
 
-Tabs.WebhookTab:AddDropdown({
+WebhookTab:Dropdown({
     Title = "Tier Filter",
     Values = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Secret"},
     Value = {"Mythic", "Secret"},
@@ -2369,7 +2540,7 @@ Tabs.WebhookTab:AddDropdown({
     end,
 })
 
-local FishNameDropdown = Tabs.WebhookTab:AddDropdown({
+local FishNameDropdown = WebhookTab:Dropdown({
     Title = "Name Filter",
     Values = #FishNames > 0 and FishNames or {"No Fish Found"},
     Multi = true,
@@ -2379,14 +2550,14 @@ local FishNameDropdown = Tabs.WebhookTab:AddDropdown({
     end,
 })
 
-Tabs.WebhookTab:AddButton({
+WebhookTab:Button({
     Title = "Refresh Fish",
     Callback = function()
         FishNameDropdown:Refresh(FishNames)
     end,
 })
 
-local WebhookNameInput = Tabs.WebhookTab:AddInput({
+local WebhookNameInput = WebhookTab:Input({
     Title = "Hide Identity",
     Value = "",
     Placeholder = "Input Here",
@@ -2396,7 +2567,7 @@ local WebhookNameInput = Tabs.WebhookTab:AddInput({
 })
 ConfigManager:Register("webhookNameInput", WebhookNameInput)
 
-local WebhookToggle = Tabs.WebhookTab:AddToggle({
+local WebhookToggle = WebhookTab:Toggle({
     Title = "Send Fish Webhook",
     Value = false,
     Callback = function(value)
@@ -2405,9 +2576,9 @@ local WebhookToggle = Tabs.WebhookTab:AddToggle({
 })
 ConfigManager:Register("webhookToggle", WebhookToggle)
 
-Tabs.WebhookTab:Divider()
+WebhookTab:Divider()
 
-Tabs.WebhookTab:AddButton({
+WebhookTab:Button({
     Title = "Test Webhook Connection",
     Callback = function()
         if not WebhookConfig.URL or not WebhookConfig.URL:match("discord.com/api/webhooks") then
@@ -2441,14 +2612,14 @@ Tabs.WebhookTab:AddButton({
             end)
             
             if success then
-                MainWindow:Notify({
+                PsychoUi:Notify({
                     Title = "Success",
                     Content = "Webhook test sent successfully!",
                     Duration = 3,
                     Icon = "laptop-minimal-check",
                 })
             else
-                MainWindow:Notify({
+                PsychoUi:Notify({
                     Title = "Error",
                     Content = "Failed to send webhook: " .. tostring(errorMsg),
                     Duration = 3,
@@ -2459,9 +2630,9 @@ Tabs.WebhookTab:AddButton({
     end,
 })
 
-local SisyphusSection = Tabs.QuestTab:AddSection({Title = "Sisyphus State Quest"})
+local SisyphusSection = QuestTab:Section({Title = "Sisyphus State Quest"})
 
-local DeepSeaPanel = SisyphusSection:AddParagraph({
+local DeepSeaPanel = SisyphusSection:Paragraph({
     Title = "Deep Sea Panel",
     Desc = "Loading...",
 })
@@ -2500,7 +2671,7 @@ local function TeleportTo(x, y, z, rotation)
     end
 end
 
-SisyphusSection:AddToggle({
+SisyphusSection:Toggle({
     Title = "Auto Deep Sea Quest",
     Desc = "Automatically complete Deep Sea Quest!",
     Value = false,
@@ -2522,30 +2693,28 @@ SisyphusSection:AddToggle({
     end,
 })
 
-
-
-SisyphusSection:AddButton({
+SisyphusSection:Button({
     Title = "Treasure Room",
     Callback = function()
         TeleportTo(-3601, -283, -1611)
     end,
 })
 
-SisyphusSection:AddButton({
+SisyphusSection:Button({
     Title = "Sisyphus Statue",
     Callback = function()
         TeleportTo(-3698, -135, -1008)
     end,
 })
 
-local ElementSection = Tabs.QuestTab:AddSection({Title = "Element Quest"})
+local ElementSection = QuestTab:Section({Title = "Element Quest"})
 
-local ElementPanel = ElementSection:AddParagraph({
+local ElementPanel = ElementSection:Paragraph({
     Title = "Element Panel",
     Desc = "Loading...",
 })
 
-ElementSection:AddToggle({
+ElementSection:Toggle({
     Title = "Auto Element Quest",
     Desc = "Automatically teleport through Element Quest Stages!",
     Value = false,
@@ -2581,21 +2750,21 @@ ElementSection:AddToggle({
     end,
 })
 
-ElementSection:AddButton({
+ElementSection:Button({
     Title = "Secret Temple",
     Callback = function()
         TeleportTo(1453, -22, -636)
     end,
 })
 
-ElementSection:AddButton({
+ElementSection:Button({
     Title = "Underground Cellar",
     Callback = function()
         TeleportTo(2136, -91, -701)
     end,
 })
 
-ElementSection:AddButton({
+ElementSection:Button({
     Title = "Transcended Stones",
     Callback = function()
         TeleportTo(1480, 128, -593)
@@ -2609,9 +2778,9 @@ task.spawn(function()
     end
 end)
 
-local ServerUtilitySection = Tabs.UtilitiesTab:AddSection({Title = "Server Utility"})
+local ServerUtilitySection = UtilitiesTab:Section({Title = "Server Utility"})
 
-local AntiStaffToggle = ServerUtilitySection:AddToggle({
+local AntiStaffToggle = ServerUtilitySection:Toggle({
     Title = "Anti Staff",
     Desc = "Auto kick if staff/developer joins the server",
     Value = false,
@@ -2654,7 +2823,7 @@ local AntiStaffToggle = ServerUtilitySection:AddToggle({
 })
 ConfigManager:Register("antiStaffToggle", AntiStaffToggle)
 
-local StreamerModeToggle = ServerUtilitySection:AddToggle({
+local StreamerModeToggle = ServerUtilitySection:Toggle({
     Title = "Streamer Mode",
     Desc = "This will hide the location, character, and coins.",
     Value = false,
@@ -2694,9 +2863,9 @@ local StreamerModeToggle = ServerUtilitySection:AddToggle({
 })
 ConfigManager:Register("streamerModeToggle", StreamerModeToggle)
 
-Tabs.UtilitiesTab:Divider()
+UtilitiesTab:Divider()
 
-local RadarToggle = Tabs.UtilitiesTab:AddToggle({
+local RadarToggle = UtilitiesTab:Toggle({
     Title = "Bypass Radar",
     Value = false,
     Callback = function(value)
@@ -2707,7 +2876,7 @@ local RadarToggle = Tabs.UtilitiesTab:AddToggle({
 })
 ConfigManager:Register("radarToggle", RadarToggle)
 
-local DivingGearToggle = Tabs.UtilitiesTab:AddToggle({
+local DivingGearToggle = UtilitiesTab:Toggle({
     Title = "Bypass Diving Gear",
     Value = false,
     Callback = function(value)
@@ -2727,9 +2896,9 @@ local DivingGearToggle = Tabs.UtilitiesTab:AddToggle({
 })
 ConfigManager:Register("divingGearToggle", DivingGearToggle)
 
-local MerchantShopSection = Tabs.ShopTab:AddSection({Title = "Merchant Shop"})
+local MerchantShopSection = ShopTab:Section({Title = "Merchant Shop"})
 
-local MerchantPanel = MerchantShopSection:AddParagraph({
+local MerchantPanel = MerchantShopSection:Paragraph({
     Title = "MERCHANT STOCK PANEL",
     Desc = "Loading...",
 })
@@ -2755,7 +2924,7 @@ local function UpdateMerchantInfo()
     end
 end
 
-MerchantShopSection:AddButton({
+MerchantShopSection:Button({
     Title = "Open/Close Merchant",
     Callback = function()
         local merchant = PlayerGui:FindFirstChild("Merchant")
@@ -2780,7 +2949,7 @@ task.spawn(function()
     end
 end)
 
-MerchantShopSection:AddButton({
+MerchantShopSection:Button({
     Title = "Teleport To Merchant",
     Callback = function()
         local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -2791,7 +2960,7 @@ MerchantShopSection:AddButton({
     end,
 })
 
-local RodSection = Tabs.ShopTab:AddSection({Title = "Purchase Rod"})
+local RodSection = ShopTab:Section({Title = "Purchase Rod"})
 
 local Rods = {
     ["Chrome Rod (43.7K)"] = {Id = 7, Price = 43700},
@@ -2833,7 +3002,7 @@ for name, data in pairs(Rods) do
 end
 table.sort(RodOptions)
 
-local RodDropdown = RodSection:AddDropdown({
+local RodDropdown = RodSection:Dropdown({
     Title = "Select Rod",
     Values = RodOptions,
     Callback = function(value)
@@ -2841,11 +3010,11 @@ local RodDropdown = RodSection:AddDropdown({
     end,
 })
 
-RodSection:AddButton({
+RodSection:Button({
     Title = "Purchase",
     Callback = function()
         if not SelectedRod then
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Error",
                 Content = "Select Rod First!",
                 Duration = 2.5,
@@ -2856,7 +3025,7 @@ RodSection:AddButton({
         
         local rodData = Rods[SelectedRod]
         if not rodData then
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Error",
                 Content = "Rod ID Not Found!",
                 Duration = 2.5,
@@ -2871,7 +3040,7 @@ RodSection:AddButton({
     end,
 })
 
-local BaitSection = Tabs.ShopTab:AddSection({Title = "Purchase Bait"})
+local BaitSection = ShopTab:Section({Title = "Purchase Bait"})
 
 local Baits = {
     ["Starter Bait (0)"] = {Id = 1, Price = 0},
@@ -2911,7 +3080,7 @@ for name, data in pairs(Baits) do
 end
 table.sort(BaitOptions)
 
-local BaitDropdown = BaitSection:AddDropdown({
+local BaitDropdown = BaitSection:Dropdown({
     Title = "Select Bait",
     Values = BaitOptions,
     Callback = function(value)
@@ -2919,11 +3088,11 @@ local BaitDropdown = BaitSection:AddDropdown({
     end,
 })
 
-BaitSection:AddButton({
+BaitSection:Button({
     Title = "Purchase",
     Callback = function()
         if not SelectedBait then
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Error",
                 Content = "Select Bait First!",
                 Duration = 2.5,
@@ -2934,7 +3103,7 @@ BaitSection:AddButton({
         
         local baitData = Baits[SelectedBait]
         if not baitData then
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Error",
                 Content = "Bait ID Not Found!",
                 Duration = 2.5,
@@ -2949,10 +3118,10 @@ BaitSection:AddButton({
     end,
 })
 
-local BoatSection = Tabs.ShopTab:AddSection({Title = "Purchase Boat"})
+local BoatSection = ShopTab:Section({Title = "Purchase Boat"})
 
 local Boats = {
-    ["Small Boat (300)"] = {Id = 1, Price = 300},
+    ["Small Psycho Boat (300)"] = {Id = 1, Price = 300},
     ["Kayak (1.1K)"] = {Id = 2, Price = 1100},
     ["Jetski (7.5K)"] = {Id = 3, Price = 7500},
     ["Highfield Boat (25K)"] = {Id = 4, Price = 25000},
@@ -2966,7 +3135,7 @@ for name, data in pairs(Boats) do
     table.insert(BoatOptions, name)
 end
 
-local BoatDropdown = BoatSection:AddDropdown({
+local BoatDropdown = BoatSection:Dropdown({
     Title = "Select Boat",
     Values = BoatOptions,
     Callback = function(value)
@@ -2974,11 +3143,11 @@ local BoatDropdown = BoatSection:AddDropdown({
     end,
 })
 
-BoatSection:AddButton({
+BoatSection:Button({
     Title = "Purchase",
     Callback = function()
         if not SelectedBoat then
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Error",
                 Content = "Select Boat First!",
                 Duration = 2.5,
@@ -2989,7 +3158,7 @@ BoatSection:AddButton({
         
         local boatData = Boats[SelectedBoat]
         if not boatData then
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Error",
                 Content = "Boat ID Not Found!",
                 Duration = 2.5,
@@ -3004,7 +3173,7 @@ BoatSection:AddButton({
     end,
 })
 
-local LocationSection = Tabs.TeleportTab:AddSection({Title = "Location"})
+local LocationSection = TeleportTab:Section({Title = "Location"})
 
 local Locations = {
     "Ancient Jungle",
@@ -3066,7 +3235,7 @@ local LocationCoordinates = {
     ["Pirate Cove"] = Vector3.new(3207.78, 9.10, 3546.13),
 }
 
-local LocationDropdown = LocationSection:AddDropdown({
+local LocationDropdown = LocationSection:Dropdown({
     Title = "Choose Location",
     Values = Locations,
     Value = "Ancient Jungle",
@@ -3076,11 +3245,11 @@ local LocationDropdown = LocationSection:AddDropdown({
 })
 ConfigManager:Register("tpLocationDropdown", LocationDropdown)
 
-LocationSection:AddButton({
+LocationSection:Button({
     Title = "Teleport",
     Callback = function()
         if not SelectedLocation then
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Error",
                 Content = "Select location first!",
                 Duration = 2.5,
@@ -3099,7 +3268,7 @@ LocationSection:AddButton({
     end,
 })
 
-local PlayerSection = Tabs.TeleportTab:AddSection({Title = "Player"})
+local PlayerSection = TeleportTab:Section({Title = "Player"})
 
 local function GetPlayerList()
     local players = {}
@@ -3109,7 +3278,7 @@ local function GetPlayerList()
     return players
 end
 
-local PlayerDropdown = PlayerSection:AddDropdown({
+local PlayerDropdown = PlayerSection:Dropdown({
     Title = "Select Player",
     Values = GetPlayerList(),
     Callback = function(value)
@@ -3117,11 +3286,11 @@ local PlayerDropdown = PlayerSection:AddDropdown({
     end,
 })
 
-PlayerSection:AddButton({
+PlayerSection:Button({
     Title = "Refresh",
     Callback = function()
         PlayerDropdown:Refresh(GetPlayerList())
-        MainWindow:Notify({
+        PsychoUi:Notify({
             Title = "Success",
             Content = "Player list refreshed successfully",
             Duration = 2.5,
@@ -3130,11 +3299,11 @@ PlayerSection:AddButton({
     end,
 })
 
-PlayerSection:AddButton({
+PlayerSection:Button({
     Title = "Go",
     Callback = function()
         if not SelectedPlayer then
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Error",
                 Content = "Select player first!",
                 Duration = 2.5,
@@ -3145,7 +3314,7 @@ PlayerSection:AddButton({
         
         local targetPlayer = Players:FindFirstChild(SelectedPlayer)
         if not targetPlayer or not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            MainWindow:Notify({
+            PsychoUi:Notify({
                 Title = "Error",
                 Content = "Invalid player!",
                 Duration = 2.5,
@@ -3161,7 +3330,7 @@ PlayerSection:AddButton({
     end,
 })
 
-MainWindow:OnDestroy(function()
+Window:OnDestroy(function()
     ConfigManager:Save()
     
     if LegitFishingToggle then LegitFishingToggle:Set(false) end
@@ -3239,4 +3408,3 @@ end)
 ConfigManager:Load()
 
 print("Psycho Loaded Successfully...")
-print("Happy Fishing Brotherrrrr...")
